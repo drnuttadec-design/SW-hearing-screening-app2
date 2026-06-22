@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบคัดกรองการได้ยิน รพ.ศรีสังวรสุโขทัย</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Sarabun', sans-serif; }
+    .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
+
+  <!-- Import Map for React and ReactDOM -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "react-dom": "https://esm.sh/react-dom@18.2.0"
+    }
+  }
+  </script>
+  
+  <!-- Babel for JSX Compiling in Browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 selection:bg-teal-200 min-h-screen">
+  
+  <!-- จุดที่ React จะไปแสดงผล -->
+  <div id="root"></div>
+
+  <!-- โค้ด Application -->
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import * as lucideReact from 'https://esm.sh/lucide-react@0.294.0?external=react';
+    
+    const { Ear, Phone, Users, Tv, Brain, RotateCcw, VolumeX, MessageSquare, Frown, MapPin, CheckCircle, AlertTriangle, Home, BarChart2, Settings, Trash2, Save, User, Calendar, XCircle, Stethoscope, ChevronRight, Sparkles, Bot, Loader2, Lock, Key } = lucideReact;
+
+    // --- ตั้งค่า URL ของ Google Apps Script (นำ URL ของคุณมาใส่ตรงนี้) ---
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx08ig6B1SWMX7VNHrQqYn0XgYto8oCxZKeKWgLpErAfVr4l1B56aNOUqpURZ7fQY8q/exec";
+    // ไม่จำเป็นต้องใช้ apiKey ในฝั่ง Frontend แล้วครับ เพราะเราย้ายไปรันบน GAS
+
+    // --- ชุดคำถาม ---
+    const defaultQuestions = [
+      { id: 1, text: 'ฉันมีปัญหาในการคุยโทรศัพท์ ได้ยินไม่ชัด', icon: <Phone className="w-8 h-8 mb-2" /> },
+      { id: 2, text: 'เมื่อมีการคุยกันมากกว่า 2 คน ฉันลำบากในการทำความเข้าใจเรื่องที่คุย', icon: <Users className="w-8 h-8 mb-2" /> },
+      { id: 3, text: 'คนรอบข้างบอกว่าฉันเปิดทีวีเสียงดัง', icon: <Tv className="w-8 h-8 mb-2" /> },
+      { id: 4, text: 'ฉันรู้สึกเครียด ต้องพยายามทำความเข้าใจเรื่องที่พูดคุย', icon: <Brain className="w-8 h-8 mb-2" /> },
+      { id: 5, text: 'ฉันได้ยินคำพูดไม่ชัด ต้องขอให้พูดซ้ำ', icon: <RotateCcw className="w-8 h-8 mb-2" /> },
+      { id: 6, text: 'เมื่อคุยในที่มีเสียงรบกวน เช่นที่ประชุม งานเลี้ยง ฉันได้ยินคำพูดไม่ชัด', icon: <VolumeX className="w-8 h-8 mb-2" /> },
+      { id: 7, text: 'ฉันตอบไม่ตรงกับคำถาม', icon: <MessageSquare className="w-8 h-8 mb-2" /> },
+      { id: 8, text: 'คนรอบข้างเบื่อรำคาญ ที่ฉันฟังไม่เข้าใจ', icon: <Frown className="w-8 h-8 mb-2" /> },
+      { id: 9, text: 'ฉันสับสนไม่รู้ว่าเสียงมาจากทางไหน', icon: <MapPin className="w-8 h-8 mb-2" /> },
+      { id: 10, text: 'ข้อนี้ขอให้คนในครอบครัวตอบ คุณคิดว่าคนนี้มีปัญหาการได้ยินหรือไม่', icon: <Ear className="w-8 h-8 mb-2" />, isFamily: true }
+    ];
+
+    const defaultUnits = [
+      "รพ. ศรีสังวร", "รพ.สต.คลองตาล", "รพ.สต.บ้านไร่", "รพ.สต.วัดเกาะ", 
+      "รพ.สต.เกาะตาเลี้ยง", "สอ.ต.นาขุนไกร", "รพ.สต.วังทอง", "รพ.สต.บ้านวงฆ้อง", 
+      "รพ.สต.บ้านซ่าน", "รพ.สต.ราวต้นจันทร์", "เครือข่ายศรีสัชนาลัย", 
+      "เครือข่ายสวรรคโลก", "เครือข่ายทุ่งเสลี่ยม", "เครือข่ายศรีนคร"
+    ];
+
+    function App() {
+      const [view, setView] = useState('home'); 
+      const [records, setRecords] = useState([]);
+      
+      const [settings, setSettings] = useState({
+        projectName: "โครงการตรวจการได้ยินเชิงรุกเพื่อค้นหาผู้พิการทางการได้ยิน",
+        departmentName: "กลุ่มงานโสต ศอ นาสิก รพ.ศรีสังวรสุโขทัย",
+        units: defaultUnits
+      });
+      const [tempSettings, setTempSettings] = useState(settings);
+      const [newUnit, setNewUnit] = useState('');
+
+      const [patientInfo, setPatientInfo] = useState({ name: '', age: '', phone: '', address: '', unit: '' });
+      const [answers, setAnswers] = useState(Array(10).fill(null));
+      const [score, setScore] = useState(0);
+
+      const [aiAdvice, setAiAdvice] = useState('');
+      const [isAiAdviceLoading, setIsAiAdviceLoading] = useState(false);
+      const [aiSummary, setAiSummary] = useState('');
+      const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
+
+      const [customAiQuery, setCustomAiQuery] = useState('');
+      const [customAiResponse, setCustomAiResponse] = useState('');
+      const [isCustomAiLoading, setIsCustomAiLoading] = useState(false);
+
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [adminPassword, setAdminPassword] = useState('122244444');
+      const [showAuthModal, setShowAuthModal] = useState(false);
+      const [authTargetView, setAuthTargetView] = useState('');
+      const [authMode, setAuthMode] = useState('login'); 
+      const [authInput, setAuthInput] = useState({ username: '', password: '', pin: '', newPassword: '' });
+      const [authError, setAuthError] = useState('');
+
+      useEffect(() => {
+        const savedRecords = JSON.parse(localStorage.getItem('hearingRecords')) || [];
+        const savedSettings = JSON.parse(localStorage.getItem('hearingSettings'));
+        const savedAdminPassword = localStorage.getItem('adminPassword');
+        
+        setRecords(savedRecords);
+        if (savedSettings) {
+          setSettings(savedSettings);
+          setTempSettings(savedSettings); 
+        }
+        if (savedAdminPassword) setAdminPassword(savedAdminPassword);
+      }, []);
+
+      const saveSettings = (newSettings) => {
+        setSettings(newSettings);
+        localStorage.setItem('hearingSettings', JSON.stringify(newSettings));
+      };
+
+      const handleSaveSettingsAction = () => {
+        saveSettings(tempSettings);
+        alert('บันทึกการตั้งค่าเรียบร้อยแล้ว');
+      };
+
+      const addUnit = () => {
+        if(newUnit.trim()) {
+          setTempSettings({...tempSettings, units: [...tempSettings.units, newUnit.trim()]});
+          setNewUnit('');
+        }
+      };
+
+      const removeUnit = (index) => {
+        const updated = tempSettings.units.filter((_, i) => i !== index);
+        setTempSettings({...tempSettings, units: updated});
+      };
+
+      const fetchGemini = async (prompt, systemInstruction = "คุณคือผู้ช่วย AI") => {
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === "") {
+          return "เกิดข้อผิดพลาด: ไม่พบการเชื่อมต่อกับ Google Apps Script";
+        }
+        
+        try {
+          // เตรียมข้อมูลเพื่อส่งให้ GAS (ตรงตามที่เขียนรับไว้ใน GAS.txt)
+          const payload = {
+            action: "analyze",
+            prompt: prompt,
+            systemInstruction: systemInstruction
+          };
+
+          const res = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // ใช้ text/plain เพื่อป้องกันปัญหา CORS
+            body: JSON.stringify(payload)
+          });
+          
+          const data = await res.json();
+          
+          // ตรวจสอบผลลัพธ์จาก GAS
+          if (data.result === "success") {
+            return data.ai_response;
+          } else {
+            throw new Error(data.error || 'Unknown Error from GAS');
+          }
+        } catch (err) {
+          return `เกิดข้อผิดพลาดในการวิเคราะห์: ${err.message}`;
+        }
+      };
+
+      const handleStart = () => {
+        setPatientInfo({ name: '', age: '', phone: '', address: '', unit: '' });
+        setAnswers(Array(10).fill(null));
+        setAiAdvice(''); 
+        setView('prescreen');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const handlePreScreen = (status) => {
+        if (status === 'pass') {
+          setView('prescreen_reject');
+        } else {
+          setView('form');
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const handleAnswer = (index, value) => {
+        const newAnswers = [...answers];
+        newAnswers[index] = value;
+        setAnswers(newAnswers);
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (answers.includes(null)) {
+          alert("กรุณาตอบคำถามให้ครบทุกข้อครับ");
+          return;
+        }
+
+        const totalScore = answers.reduce((a, b) => a + b, 0);
+        setScore(totalScore);
+
+        let statusText = 'ปกติ';
+        if (totalScore >= 16) {
+          statusText = 'เสี่ยงสูง';
+        } else if (totalScore >= 11) {
+          statusText = 'เสี่ยงปานกลาง';
+        }
+
+        const newRecord = {
+          id: Date.now(),
+          date: new Date().toLocaleString('th-TH'),
+          ...patientInfo,
+          score: totalScore,
+          status: statusText,
+          q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
+          q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8], q10: answers[9]
+        };
+
+        const updatedRecords = [newRecord, ...records];
+        setRecords(updatedRecords);
+        localStorage.setItem('hearingRecords', JSON.stringify(updatedRecords));
+        
+        if (GOOGLE_SCRIPT_URL !== "") {
+          fetch(GOOGLE_SCRIPT_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(newRecord) 
+          }).catch(err => console.error('Error saving sheet:', err));
+        }
+
+        setView('result');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const deleteRecord = (id) => {
+        if(window.confirm("ต้องการลบข้อมูลนี้ใช่หรือไม่?")) {
+          const updated = records.filter(r => r.id !== id);
+          setRecords(updated);
+          localStorage.setItem('hearingRecords', JSON.stringify(updated));
+        }
+      };
+
+      const handleNavigation = (target) => {
+        if (target === 'dashboard' || target === 'settings') {
+          if (isAdmin) {
+            setView(target);
+            if (target === 'dashboard') setAiSummary('');
+            if (target === 'settings') setTempSettings(settings); 
+          } else {
+            setAuthTargetView(target);
+            setShowAuthModal(true);
+            setAuthMode('login');
+            setAuthError('');
+            setAuthInput({ username: '', password: '', pin: '', newPassword: '' });
+          }
+        } else {
+          setView(target);
+        }
+      };
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (authInput.username === 'admin' && authInput.password === adminPassword) {
+          setIsAdmin(true);
+          setShowAuthModal(false);
+          setView(authTargetView);
+          if (authTargetView === 'dashboard') setAiSummary('');
+          if (authTargetView === 'settings') setTempSettings(settings);
+        } else {
+          setAuthError('Username หรือ Password ไม่ถูกต้อง!');
+        }
+      };
+
+      const handleChangePassword = (e) => {
+        e.preventDefault();
+        if (authInput.pin === '1207') {
+          if (authInput.newPassword.length < 4) {
+            setAuthError('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร');
+            return;
+          }
+          setAdminPassword(authInput.newPassword);
+          localStorage.setItem('adminPassword', authInput.newPassword);
+          setAuthMode('login');
+          setAuthError('');
+          setAuthInput({ ...authInput, password: '', pin: '', newPassword: '' });
+          alert('เปลี่ยนรหัสผ่านเรียบร้อยแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่');
+        } else {
+          setAuthError('PIN Code ไม่ถูกต้อง!');
+        }
+      };
+
+      const handleGenerateAdvice = async () => {
+        setIsAiAdviceLoading(true);
+        const prompt = `ผู้ป่วยชื่อ ${patientInfo.name || 'คุณตา/คุณยาย'} อายุ ${patientInfo.age} ปี ทำแบบประเมินปัญหาการได้ยินได้คะแนน ${score}/20 (เกณฑ์ปกติ 0-10, เสี่ยงปานกลาง 11-15, เสี่ยงสูง 16-20) 
+        กรุณาเขียนคำแนะนำการปฏิบัติตัวเบื้องต้นเกี่ยวกับการดูแลสุขภาพหู 3 ข้อสั้นๆ อ่านง่าย เป็นกันเองและให้กำลังใจ เหมาะสำหรับผู้สูงอายุ (หลีกเลี่ยงการวินิจฉัยทางการแพทย์เชิงลึก) โดยใช้ภาษาไทย และจัดรูปแบบให้อ่านง่าย`;
+        
+        const advice = await fetchGemini(prompt, "คุณคือแพทย์ผู้เชี่ยวชาญด้าน โสต ศอ นาสิก (ENT) ที่ใจดีและอธิบายเข้าใจง่าย");
+        setAiAdvice(advice);
+        setIsAiAdviceLoading(false);
+      };
+
+      const handleGenerateSummary = async () => {
+        setIsAiSummaryLoading(true);
+        const riskCount = records.filter(r => r.score >= 11).length;
+        const normalCount = records.length - riskCount;
+        const avgAge = records.length > 0 ? (records.reduce((acc, curr) => acc + Number(curr.age), 0) / records.length).toFixed(1) : 0;
+        
+        const prompt = `จากข้อมูลการคัดกรองการได้ยินจำนวน ${records.length} คน พบผู้ที่มีความเสี่ยง (คะแนน 11-20) ${riskCount} คน และอยู่ในเกณฑ์ปกติ (คะแนน 0-10) ${normalCount} คน อายุเฉลี่ยของผู้เข้ารับการตรวจคือ ${avgAge} ปี 
+        กรุณาวิเคราะห์และสรุปภาพรวมสั้นๆ ประมาณ 3-4 บรรทัด ว่าแนวโน้มเป็นอย่างไร และให้ข้อเสนอแนะ 1 ข้อสำหรับเจ้าหน้าที่สาธารณสุขในการลงพื้นที่ครั้งต่อไป`;
+        
+        const summary = await fetchGemini(prompt, "คุณคือนักวิเคราะห์ข้อมูลสาธารณสุขระดับเชี่ยวชาญ");
+        setAiSummary(summary);
+        setIsAiSummaryLoading(false);
+      };
+
+      const handleCustomAiQuery = async () => {
+        if(!customAiQuery.trim()) return;
+        setIsCustomAiLoading(true);
+        const riskRecords = records.filter(r => r.score >= 11);
+        
+        let riskDataText = riskRecords.map(r => `- อายุ ${r.age} ปี, หน่วย: ${r.unit}, คะแนน: ${r.score} (${r.status})`).join('\n');
+        if(!riskDataText) riskDataText = "ไม่มีข้อมูลผู้มีความเสี่ยงในขณะนี้";
+
+        const prompt = `ข้อมูลผู้มีความเสี่ยงการได้ยิน (คะแนน 11-20) จำนวน ${riskRecords.length} คน มีดังนี้:\n${riskDataText}\n\nคำถามจากเจ้าหน้าที่ผู้คัดกรอง: ${customAiQuery}\n\nกรุณาตอบคำถามนี้โดยวิเคราะห์จากข้อมูลผู้มีความเสี่ยงด้านบน ให้คำตอบที่กระชับ เป็นรูปธรรม และนำไปปรับใช้ในการวางแผนสาธารณสุขได้จริง`;
+        
+        const response = await fetchGemini(prompt, "คุณคือนักวิเคราะห์ข้อมูลสาธารณสุขระดับเชี่ยวชาญ ที่ช่วยเจ้าหน้าที่วิเคราะห์ข้อมูลผู้ป่วยกลุ่มเสี่ยง");
+        setCustomAiResponse(response);
+        setIsCustomAiLoading(false);
+      };
+
+      let currentViewContent = null;
+
+      if (view === 'home') {
+        currentViewContent = (
+          <div className="max-w-4xl mx-auto mt-12 p-6 text-center animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-xl p-8 md:p-16 transform transition hover:shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-6 opacity-10"><Stethoscope className="w-48 h-48 text-teal-500" /></div>
+              <Ear className="w-24 h-24 mx-auto text-teal-500 mb-6 animate-pulse" />
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-800 mb-4">ยินดีต้อนรับสู่ระบบคัดกรองการได้ยิน</h2>
+              <p className="text-xl text-slate-600 mb-8 max-w-2xl mx-auto">
+                ผู้รับการตรวจคัดกรองต้องมีหูได้ยินไม่ชัดทั้ง 2 ข้าง และเป็นมานานกว่า 4 เดือน 
+              </p>
+              <button 
+                onClick={handleStart}
+                className="bg-teal-600 hover:bg-teal-500 text-white text-2xl font-bold py-6 px-12 rounded-full shadow-lg hover:shadow-teal-500/50 hover:-translate-y-2 transition-all duration-300 flex items-center justify-center gap-3 mx-auto w-full md:w-auto z-10 relative"
+              >
+                <Stethoscope size={32} /> เริ่มทำแบบประเมิน
+              </button>
+            </div>
+          </div>
+        );
+      } else if (view === 'prescreen') {
+        currentViewContent = (
+          <div className="max-w-3xl mx-auto mt-12 p-6 animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-xl p-8 text-center border-t-8 border-teal-500">
+              <h2 className="text-3xl font-bold text-slate-800 mb-6">การทดสอบเบื้องต้น</h2>
+              <p className="text-2xl text-teal-700 mb-8 p-4 bg-teal-50 rounded-xl font-medium">
+                "เมื่อถูนิ้วห่างจากหน้าหูท่าน 1 นิ้ว ท่านได้ยินชัดกี่ข้าง?"
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <button onClick={() => handlePreScreen('pass')} className="group p-6 bg-slate-50 hover:bg-green-100 rounded-2xl border-2 border-slate-200 hover:border-green-500 transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-md">
+                  <Ear className="w-16 h-16 mx-auto text-slate-400 group-hover:text-green-600 mb-4" />
+                  <h3 className="text-2xl font-bold text-slate-700 group-hover:text-green-700">ได้ยินเสียง 1 ข้าง</h3>
+                </button>
+                <button onClick={() => handlePreScreen('pass')} className="group p-6 bg-slate-50 hover:bg-green-100 rounded-2xl border-2 border-slate-200 hover:border-green-500 transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-md">
+                  <div className="flex justify-center gap-2 mb-4">
+                    <Ear className="w-16 h-16 text-slate-400 group-hover:text-green-600" />
+                    <Ear className="w-16 h-16 text-slate-400 group-hover:text-green-600" style={{transform: 'scaleX(-1)'}}/>
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-700 group-hover:text-green-700">ได้ยินเสียงทั้ง 2 ข้าง</h3>
+                </button>
+                <button onClick={() => handlePreScreen('fail')} className="group p-6 bg-slate-50 hover:bg-orange-100 rounded-2xl border-2 border-slate-200 hover:border-orange-500 transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-md ring-4 ring-orange-200">
+                  <div className="flex justify-center gap-2 mb-4 relative">
+                    <Ear className="w-16 h-16 text-slate-400 group-hover:text-orange-600 opacity-50" />
+                    <Ear className="w-16 h-16 text-slate-400 group-hover:text-orange-600 opacity-50" style={{transform: 'scaleX(-1)'}}/>
+                    <XCircle className="w-8 h-8 text-red-500 absolute top-0 right-1/4" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-700 group-hover:text-orange-700">ไม่ได้ยินเสียงทั้ง 2 ข้าง</h3>
+                  <p className="text-sm text-orange-600 mt-2">(ทำแบบสอบถามต่อ)</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      } else if (view === 'prescreen_reject') {
+        currentViewContent = (
+          <div className="max-w-2xl mx-auto mt-12 p-6 animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-xl p-10 text-center border-t-8 border-green-500">
+              <CheckCircle className="w-24 h-24 mx-auto text-green-500 mb-6" />
+              <h2 className="text-3xl font-bold text-slate-800 mb-4">ผลการทดสอบเบื้องต้นปกติ</h2>
+              <div className="bg-green-50 p-6 rounded-2xl mb-8">
+                <p className="text-2xl text-green-800 font-medium">"ท่านยังไม่เข้าเกณฑ์พิการ ยังไม่จำเป็นต้องรับการตรวจการได้ยินเพิ่มเติมในขณะนี้ครับ"</p>
+              </div>
+              <button onClick={() => setView('home')} className="bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg hover:-translate-y-1 transition-all">
+                กลับหน้าแรก
+              </button>
+            </div>
+          </div>
+        );
+      } else if (view === 'form') {
+        currentViewContent = (
+          <div className="max-w-4xl mx-auto mt-8 p-4 animate-fade-in">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="bg-white p-8 rounded-3xl shadow-lg border-t-8 border-teal-600">
+                <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><User className="text-teal-600"/> ข้อมูลผู้รับการตรวจ</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-lg font-medium text-slate-700 mb-2">ชื่อ-นามสกุล</label>
+                    <input required type="text" className="w-full p-4 border-2 border-slate-200 rounded-xl text-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none" value={patientInfo.name} onChange={e => setPatientInfo({...patientInfo, name: e.target.value})} placeholder="ระบุชื่อ-นามสกุล" />
+                  </div>
+                  <div>
+                    <label className="block text-lg font-medium text-slate-700 mb-2">อายุ (ปี)</label>
+                    <input required type="number" className="w-full p-4 border-2 border-slate-200 rounded-xl text-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none" value={patientInfo.age} onChange={e => setPatientInfo({...patientInfo, age: e.target.value})} placeholder="ระบุอายุ" />
+                  </div>
+                  <div>
+                    <label className="block text-lg font-medium text-slate-700 mb-2">เบอร์โทรศัพท์</label>
+                    <input required type="tel" className="w-full p-4 border-2 border-slate-200 rounded-xl text-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none" value={patientInfo.phone} onChange={e => setPatientInfo({...patientInfo, phone: e.target.value})} placeholder="ระบุเบอร์โทร" />
+                  </div>
+                  <div>
+                    <label className="block text-lg font-medium text-slate-700 mb-2">หน่วยบริการ / รพ.สต.</label>
+                    <select required className="w-full p-4 border-2 border-slate-200 rounded-xl text-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none bg-white" value={patientInfo.unit} onChange={e => setPatientInfo({...patientInfo, unit: e.target.value})}>
+                      <option value="">-- เลือกหน่วยบริการ --</option>
+                      {settings.units.map((u, i) => <option key={i} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-lg font-medium text-slate-700 mb-2">ที่อยู่</label>
+                    <textarea required rows="2" className="w-full p-4 border-2 border-slate-200 rounded-xl text-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none" value={patientInfo.address} onChange={e => setPatientInfo({...patientInfo, address: e.target.value})} placeholder="บ้านเลขที่ หมู่ ตำบล อำเภอ"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-teal-100 p-4 rounded-xl mb-4">
+                  <h3 className="text-xl font-bold text-teal-800 text-center">กรุณาเลือกคำตอบที่ตรงกับตัวท่านมากที่สุด</h3>
+                </div>
+                {defaultQuestions.map((q, index) => (
+                  <div key={q.id} className="bg-white p-6 md:p-8 rounded-3xl shadow-md hover:shadow-xl transition-shadow border border-slate-100">
+                    <div className="flex flex-col md:flex-row gap-6 items-center">
+                      <div className="w-full md:w-1/2 flex flex-col items-center md:items-start text-center md:text-left">
+                        <div className="text-teal-500 bg-teal-50 p-4 rounded-full mb-4 md:mb-2">{q.icon}</div>
+                        <h3 className="text-2xl font-bold text-slate-800"><span className="text-teal-600 mr-2">ข้อ {q.id}.</span>{q.text}</h3>
+                        {q.isFamily && <p className="text-orange-500 font-medium mt-2 bg-orange-50 px-3 py-1 rounded-full text-sm">ส่วนนี้ให้คนในครอบครัวช่วยตอบ</p>}
+                      </div>
+                      
+                      <div className="w-full md:w-1/2 flex flex-col space-y-3">
+                        {[
+                          { val: 2, label: q.isFamily ? 'แน่นอน' : 'บ่อย', color: 'red' },
+                          { val: 1, label: q.isFamily ? 'ไม่แน่ใจ' : 'บางครั้งคราว', color: 'orange' },
+                          { val: 0, label: q.isFamily ? 'ไม่มีปัญหา' : 'ไม่เลย', color: 'green' }
+                        ].map((opt) => (
+                          <button
+                            key={opt.val}
+                            type="button"
+                            onClick={() => handleAnswer(index, opt.val)}
+                            className={`
+                              p-4 rounded-2xl text-xl font-bold transition-all duration-300 transform
+                              ${answers[index] === opt.val 
+                                ? `bg-${opt.color}-500 text-white scale-105 shadow-lg border-2 border-${opt.color}-600` 
+                                : `bg-slate-50 text-slate-600 border-2 border-slate-200 hover:border-${opt.color}-400 hover:bg-${opt.color}-50 hover:scale-105`
+                              }
+                            `}
+                          >
+                            <div className="flex justify-between items-center px-4">
+                              <span>{opt.label}</span>
+                              {answers[index] === opt.val && <CheckCircle className="w-6 h-6" />}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="sticky bottom-4 z-40 bg-white/90 backdrop-blur p-4 rounded-3xl shadow-2xl border border-slate-200">
+                <div className="flex justify-between items-center max-w-2xl mx-auto">
+                  <div className="text-lg font-bold text-slate-600">
+                    ตอบแล้ว: <span className="text-teal-600 text-2xl">{answers.filter(a => a !== null).length}</span>/10 ข้อ
+                  </div>
+                  <button 
+                    type="submit" 
+                    className={`py-4 px-10 rounded-full text-2xl font-bold text-white shadow-lg transition-all flex items-center gap-2
+                      ${answers.includes(null) ? 'bg-slate-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-500 hover:scale-105 hover:shadow-teal-500/50'}`}
+                  >
+                    <Save size={28} /> บันทึกและดูผล
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        );
+      } else if (view === 'result') {
+        const isHigh = score >= 16;
+        const isModerate = score >= 11 && score <= 15;
+        const isRisk = isHigh || isModerate;
+        
+        let boxColor = 'border-green-500';
+        let textColor = 'text-green-500';
+        let bgLight = 'bg-green-100';
+        let textDark = 'text-green-800';
+        let borderLight = 'border-green-200';
+        let statusMessage = 'การได้ยินของคุณอยู่ในเกณฑ์ปกติ';
+
+        if (isHigh) {
+          boxColor = 'border-red-500';
+          textColor = 'text-red-500';
+          bgLight = 'bg-red-100';
+          textDark = 'text-red-800';
+          borderLight = 'border-red-200';
+          statusMessage = 'คุณมีความเสี่ยงหูตึงระดับสูง ควรเข้ารับการตรวจการได้ยินยืนยันโดยด่วน';
+        } else if (isModerate) {
+          boxColor = 'border-amber-500';
+          textColor = 'text-amber-500';
+          bgLight = 'bg-amber-100';
+          textDark = 'text-amber-800';
+          borderLight = 'border-amber-200';
+          statusMessage = 'คุณมีความเสี่ยงหูตึงระดับปานกลาง ควรเข้ารับการตรวจการได้ยินยืนยัน';
+        }
+
+        currentViewContent = (
+          <div className="max-w-3xl mx-auto mt-12 p-6 animate-fade-in space-y-8">
+            <div className={`bg-white rounded-3xl shadow-2xl p-10 text-center border-t-[12px] ${boxColor}`}>
+              <div className="mb-8">
+                {isHigh ? <AlertTriangle className={`w-32 h-32 mx-auto ${textColor} mb-4 animate-bounce`} /> : 
+                 isModerate ? <AlertTriangle className={`w-32 h-32 mx-auto ${textColor} mb-4`} /> : 
+                 <CheckCircle className={`w-32 h-32 mx-auto ${textColor} mb-4`} />}
+                <h2 className="text-4xl font-bold text-slate-800">ผลการคัดกรอง</h2>
+              </div>
+
+              <div className="bg-slate-50 rounded-3xl p-8 mb-8">
+                <p className="text-2xl text-slate-600 mb-2">คะแนนรวมของคุณคือ</p>
+                <div className={`text-8xl font-black mb-4 ${textColor}`}>
+                  {score} <span className="text-3xl text-slate-400">/ 20</span>
+                </div>
+                <div className={`p-6 rounded-2xl text-2xl font-bold border-2 ${bgLight} ${textDark} ${borderLight}`}>
+                  {statusMessage}
+                </div>
+              </div>
+              
+              <button onClick={() => setView('home')} className="bg-slate-800 hover:bg-slate-700 text-white text-2xl font-bold py-5 px-12 rounded-full shadow-xl hover:-translate-y-2 transition-all w-full md:w-auto">
+                เสร็จสิ้น กลับหน้าแรก
+              </button>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-100 rounded-3xl shadow-xl p-8 border border-indigo-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-indigo-600 p-3 rounded-xl text-white"><Sparkles size={28} /></div>
+                <h3 className="text-2xl font-bold text-indigo-900">คำแนะนำเฉพาะบุคคลจาก AI</h3>
+              </div>
+              
+              {!aiAdvice ? (
+                <div className="text-center py-6">
+                  <p className="text-indigo-700 text-lg mb-6">ระบบ AI อัจฉริยะสามารถวิเคราะห์ผลคะแนนและให้คำแนะนำแบบเจาะจงสำหรับคุณตา/คุณยายได้ครับ</p>
+                  <button 
+                    onClick={handleGenerateAdvice} 
+                    disabled={isAiAdviceLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg hover:shadow-indigo-500/50 transition-all flex items-center justify-center gap-2 mx-auto disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isAiAdviceLoading ? <Loader2 className="animate-spin" size={24} /> : <Sparkles size={24} />}
+                    {isAiAdviceLoading ? 'AI กำลังคิดคำแนะนำ...' : '✨ รับคำแนะนำจาก AI'}
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative">
+                  <Bot className="absolute -top-4 -right-4 w-12 h-12 text-indigo-400 bg-white rounded-full p-1 shadow-sm" />
+                  <div className="prose prose-indigo prose-lg max-w-none text-slate-700 whitespace-pre-line">{aiAdvice}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      } else if (view === 'dashboard') {
+        const normalCount = records.filter(r => r.score <= 10).length;
+        const moderateCount = records.filter(r => r.score >= 11 && r.score <= 15).length;
+        const highCount = records.filter(r => r.score >= 16).length;
+        
+        currentViewContent = (
+          <div className="max-w-6xl mx-auto mt-8 p-6 animate-fade-in space-y-8">
+            <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3"><BarChart2 className="w-8 h-8 text-teal-600"/> แดชบอร์ดข้อมูลผู้เข้ารับการตรวจ</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-6 rounded-3xl shadow-lg border-l-8 border-blue-500 transform hover:scale-105 transition-all">
+                <p className="text-lg text-slate-500 font-medium mb-1">ทั้งหมด</p>
+                <p className="text-4xl font-black text-blue-600">{records.length} <span className="text-xl font-normal text-slate-400">คน</span></p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl shadow-lg border-l-8 border-green-500 transform hover:scale-105 transition-all">
+                <p className="text-lg text-slate-500 font-medium mb-1">ปกติ (0-10)</p>
+                <p className="text-4xl font-black text-green-500">{normalCount} <span className="text-xl font-normal text-slate-400">คน</span></p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl shadow-lg border-l-8 border-amber-500 transform hover:scale-105 transition-all">
+                <p className="text-lg text-slate-500 font-medium mb-1">ปานกลาง (11-15)</p>
+                <p className="text-4xl font-black text-amber-500">{moderateCount} <span className="text-xl font-normal text-slate-400">คน</span></p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl shadow-lg border-l-8 border-red-500 transform hover:scale-105 transition-all">
+                <p className="text-lg text-slate-500 font-medium mb-1">เสี่ยงสูง (16-20)</p>
+                <p className="text-4xl font-black text-red-500">{highCount} <span className="text-xl font-normal text-slate-400">คน</span></p>
+              </div>
+            </div>
+
+            {records.length > 0 && (
+              <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-3xl shadow-lg p-6 md:p-8 border border-teal-200">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-teal-600 p-2 rounded-lg text-white"><Sparkles size={24}/></div>
+                    <h3 className="text-xl font-bold text-teal-900">✨ วิเคราะห์ข้อมูลด้วย AI</h3>
+                  </div>
+                  {!aiSummary && (
+                    <button 
+                      onClick={handleGenerateSummary}
+                      disabled={isAiSummaryLoading}
+                      className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-6 rounded-full shadow hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isAiSummaryLoading ? <Loader2 className="animate-spin" size={20} /> : <Bot size={20} />}
+                      {isAiSummaryLoading ? 'กำลังสร้างรายงาน...' : 'สร้างรายงานสรุป'}
+                    </button>
+                  )}
+                </div>
+                
+                {aiSummary && (
+                  <div className="bg-white p-5 rounded-2xl shadow-sm text-slate-700 text-lg leading-relaxed border-l-4 border-teal-500">
+                    <p className="whitespace-pre-line">{aiSummary}</p>
+                    <button onClick={handleGenerateSummary} className="mt-4 text-sm text-teal-600 hover:text-teal-800 flex items-center gap-1 font-medium"><RotateCcw size={16}/> สรุปใหม่อีกครั้ง</button>
+                  </div>
+                )}
+
+                {/* New Custom AI Query Box */}
+                <div className="mt-8 pt-6 border-t border-teal-200">
+                  <h4 className="text-lg font-bold text-teal-800 mb-3 flex items-center gap-2">
+                    <Bot size={20}/> ถาม AI วิเคราะห์เจาะลึกเฉพาะผู้มีความเสี่ยง (11-20 คะแนน)
+                  </h4>
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <input 
+                      type="text" 
+                      className="flex-1 p-4 rounded-xl border border-teal-300 focus:ring-2 focus:ring-teal-500 outline-none text-lg bg-white" 
+                      placeholder="พิมพ์คำถาม... (เช่น วิเคราะห์แนวโน้มอายุของกลุ่มเสี่ยง หรือ ขอคำแนะนำลงพื้นที่)" 
+                      value={customAiQuery} 
+                      onChange={e => setCustomAiQuery(e.target.value)} 
+                      onKeyPress={e => e.key === 'Enter' && handleCustomAiQuery()}
+                    />
+                    <button 
+                      onClick={handleCustomAiQuery}
+                      disabled={isCustomAiLoading || !customAiQuery.trim()}
+                      className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isCustomAiLoading ? <Loader2 className="animate-spin" size={24} /> : <Sparkles size={24} />} ถาม AI
+                    </button>
+                  </div>
+                  {customAiResponse && (
+                    <div className="mt-6 bg-white p-6 rounded-2xl shadow-sm border-l-4 border-indigo-500 text-slate-700 text-lg leading-relaxed relative">
+                      <Bot className="absolute -top-3 -right-3 text-indigo-500 bg-white rounded-full p-1 border border-indigo-100" size={32} />
+                      <p className="whitespace-pre-line">{customAiResponse}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 text-lg border-b-2 border-slate-200">
+                      <th className="p-4 font-semibold">วันที่เวลา</th>
+                      <th className="p-4 font-semibold">ชื่อ-นามสกุล</th>
+                      <th className="p-4 font-semibold">อายุ</th>
+                      <th className="p-4 font-semibold">หน่วยบริการ</th>
+                      <th className="p-4 font-semibold text-center">คะแนน</th>
+                      <th className="p-4 font-semibold">ผลประเมิน</th>
+                      <th className="p-4 font-semibold text-center">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.length === 0 ? (
+                      <tr><td colSpan="7" className="p-8 text-center text-slate-500 text-xl">ยังไม่มีข้อมูลในระบบ</td></tr>
+                    ) : (
+                      records.map(record => (
+                        <tr key={record.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-lg">
+                          <td className="p-4 text-slate-600">{record.date}</td>
+                          <td className="p-4 font-medium text-slate-800">{record.name}</td>
+                          <td className="p-4 text-slate-600">{record.age}</td>
+                          <td className="p-4 text-slate-600">{record.unit}</td>
+                          <td className="p-4 text-center font-bold text-xl">{record.score}</td>
+                          <td className="p-4">
+                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                              record.score >= 16 ? 'bg-red-100 text-red-700' : 
+                              record.score >= 11 ? 'bg-amber-100 text-amber-700' : 
+                              'bg-green-100 text-green-700'
+                            }`}>{record.status}</span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <button onClick={() => deleteRecord(record.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ลบข้อมูล"><Trash2 size={20} /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      } else if (view === 'settings') {
+        currentViewContent = (
+          <div className="max-w-3xl mx-auto mt-8 p-6 animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-xl p-8 border-t-8 border-slate-700">
+              <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-2"><Settings className="text-slate-600"/> ตั้งค่าระบบ</h2>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-lg font-bold text-slate-700 mb-2">ชื่อโครงการ</label>
+                  <input type="text" className="w-full p-4 border-2 border-slate-200 rounded-xl text-lg focus:border-teal-500 outline-none" value={tempSettings.projectName} onChange={e => setTempSettings({...tempSettings, projectName: e.target.value})} />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-bold text-slate-700 mb-2">ชื่อหน่วยงานส่วนล่าง (Footer)</label>
+                  <input type="text" className="w-full p-4 border-2 border-slate-200 rounded-xl text-lg focus:border-teal-500 outline-none" value={tempSettings.departmentName} onChange={e => setTempSettings({...tempSettings, departmentName: e.target.value})} />
+                </div>
+
+                <div className="pt-6 border-t border-slate-200">
+                  <label className="block text-lg font-bold text-slate-700 mb-4">จัดการรายชื่อหน่วยบริการ (Dropdown)</label>
+                  <div className="flex gap-2 mb-4">
+                    <input type="text" className="flex-1 p-4 border-2 border-slate-200 rounded-xl text-lg focus:border-teal-500 outline-none" placeholder="เพิ่มหน่วยบริการใหม่..." value={newUnit} onChange={e => setNewUnit(e.target.value)} onKeyPress={e => e.key === 'Enter' && addUnit()} />
+                    <button onClick={addUnit} className="bg-slate-800 text-white px-6 rounded-xl font-bold hover:bg-slate-700 transition-colors">เพิ่ม</button>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-2xl max-h-64 overflow-y-auto flex flex-wrap gap-2 border border-slate-200">
+                    {tempSettings.units.map((unit, index) => (
+                      <div key={index} className="bg-white border border-slate-200 py-2 px-4 rounded-full flex items-center gap-2 shadow-sm text-slate-700 font-medium">
+                        {unit}
+                        <button onClick={() => removeUnit(index)} className="text-red-400 hover:text-red-600 bg-red-50 p-1 rounded-full"><XCircle size={16}/></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button onClick={handleSaveSettingsAction} className="w-full mt-8 bg-teal-600 hover:bg-teal-500 text-white text-xl font-bold py-4 rounded-xl shadow-lg transition-all flex justify-center items-center gap-2">
+                  <Save size={24}/> บันทึกการตั้งค่า
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <>
+          <header className="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-50">
+            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
+              <div className="flex items-center gap-4 mb-4 md:mb-0">
+                <img src="sw logo vector.jpg" alt="รพ.ศรีสังวรสุโขทัย" className="w-16 h-16 bg-white rounded-full p-1 shadow-lg" onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/150?text=Logo" }} />
+                <div>
+                  <h1 className="text-2xl font-bold">แบบทดสอบคัดกรองการได้ยิน</h1>
+                  <p className="text-sm opacity-90">{settings.projectName}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleNavigation('home')} className="p-2 hover:bg-teal-600 rounded-lg flex items-center gap-1 transition-colors"><Home size={20}/> หน้าแรก</button>
+                <button onClick={() => handleNavigation('dashboard')} className="p-2 hover:bg-teal-600 rounded-lg flex items-center gap-1 transition-colors"><BarChart2 size={20}/> ข้อมูล</button>
+                <button onClick={() => handleNavigation('settings')} className="p-2 hover:bg-teal-600 rounded-lg flex items-center gap-1 transition-colors"><Settings size={20}/> ตั้งค่า</button>
+                {isAdmin && (
+                  <button onClick={() => { setIsAdmin(false); setView('home'); }} className="p-2 hover:bg-red-500 bg-red-600/80 rounded-lg flex items-center gap-1 transition-colors ml-2" title="ออกจากระบบ">
+                    <Lock size={20}/>
+                  </button>
+                )}
+              </div>
+            </div>
+          </header>
+          
+          <main className="pb-20">
+            {currentViewContent}
+          </main>
+
+          <footer className="bg-slate-800 text-white p-8 mt-12">
+            <div className="max-w-4xl mx-auto text-center space-y-2">
+              <h3 className="text-xl font-semibold text-teal-400">{settings.departmentName}</h3>
+              <p className="text-lg flex items-center justify-center gap-2"><Phone size={20} className="text-teal-400"/> 055-682030 ต่อ 1207</p>
+              <p className="text-lg flex items-center justify-center gap-2"><MessageSquare size={20} className="text-green-400"/> LINE ID: @871ykqyc</p>
+              <p className="text-sm text-slate-400 mt-4">พัฒนาเพื่อคุณภาพชีวิตที่ดีของผู้สูงวัย ✨ ขับเคลื่อนด้วย AI</p>
+            </div>
+          </footer>
+
+          {showAuthModal && (
+            <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-teal-700 p-6 text-white text-center">
+                  <Lock className="w-12 h-12 mx-auto mb-2 opacity-90" />
+                  <h2 className="text-2xl font-bold">{authMode === 'login' ? 'เข้าสู่ระบบสำหรับเจ้าหน้าที่' : 'เปลี่ยนรหัสผ่าน'}</h2>
+                </div>
+                
+                <div className="p-8">
+                  {authError && (
+                    <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-center text-sm font-bold border border-red-200 flex items-center justify-center gap-2">
+                      <AlertTriangle size={18} /> {authError}
+                    </div>
+                  )}
+
+                  {authMode === 'login' ? (
+                    <form onSubmit={handleLogin} className="space-y-5">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-2">Username</label>
+                        <input required type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 outline-none bg-slate-50 focus:bg-white transition-colors" value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} placeholder="กรอก Username" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-2">Password</label>
+                        <input required type="password" className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 outline-none bg-slate-50 focus:bg-white transition-colors" value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} placeholder="•••••••••" />
+                      </div>
+                      <button type="submit" className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold text-lg py-3 rounded-xl transition-all shadow-md">
+                        เข้าสู่ระบบ
+                      </button>
+                      <div className="flex justify-between items-center mt-4">
+                        <button type="button" onClick={() => { setAuthMode('change_password'); setAuthError(''); }} className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1">
+                          <Key size={16} /> เปลี่ยนรหัสผ่าน
+                        </button>
+                        <button type="button" onClick={() => setShowAuthModal(false)} className="text-slate-500 hover:text-slate-700 text-sm font-medium">
+                          ยกเลิก
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleChangePassword} className="space-y-5">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-2">PIN Code (สำหรับยืนยัน)</label>
+                        <input required type="password" maxLength={4} className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 outline-none bg-slate-50 focus:bg-white transition-colors" value={authInput.pin} onChange={e => setAuthInput({...authInput, pin: e.target.value})} placeholder="กรอก PIN 4 หลัก" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-2">รหัสผ่านใหม่ (New Password)</label>
+                        <input required type="password" className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 outline-none bg-slate-50 focus:bg-white transition-colors" value={authInput.newPassword} onChange={e => setAuthInput({...authInput, newPassword: e.target.value})} placeholder="ตั้งรหัสผ่านใหม่" />
+                      </div>
+                      <button type="submit" className="w-full bg-orange-500 hover:bg-orange-400 text-white font-bold text-lg py-3 rounded-xl transition-all shadow-md">
+                        ยืนยันเปลี่ยนรหัสผ่าน
+                      </button>
+                      <div className="text-center mt-4">
+                        <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-slate-500 hover:text-slate-700 text-sm font-medium">
+                          กลับไปหน้าเข้าสู่ระบบ
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
